@@ -1,0 +1,1504 @@
+---
+title: "GorllaS.DA5030.Project.Rmd"
+author: "Sanjana Gorlla"
+date: "08/07/2022"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+
+# Breast cancer sub-type classification using proteomic data
+Problem statement : Luminal A, Luminal B, HER2, Basal-like are the molecular subtypes of breast cancer that are typically recognized. Each one is related to various prognoses, therapies, and treatments.
+
+Objective : The main objective of this project is to perform classification on breast cancer dataset based on the proteomic expression dataset to identify the subtype of breast  cancer. A collection of proteins produced by cancer cells is known as the breast cancer proteome.
+I am examining if the cancer subtype can be correctly identified using only the proteome data for each patient. The target variable in the study is PAM50 mRNA which is used in breast cancer intrinsic subtyping based on gene expression. The variable is categorical presenting four subtypes (basal-like, HER2-enriched, Luminal A and Luminal B). PAMA50 mRNA proteins are my predictor variables.Using supervised ML classification, I am examining if the cancer subtype can be correctly identified using only the proteome data for each patient.
+
+############################################################################################################################################
+
+•  Question 1 : where does the data come from? 
+
+This data collection includes 77 breast cancer samples from the Clinical Proteomic Tumor Analysis Consortium (NCI/NIH) that have had their iTRAQ proteome profiles published. For each sample, it comprises expression levels for around 12,000 proteins, with missing values present when a particular protein could not be measured.
+Kaggle URL : https://www.kaggle.com/datasets/piotrgrabo/breastcancerproteomes?resource=download
+
+It has three different files : 77cancerproteomesCPTACitraq.csv, clinicaldatabreast_cancer.csv, PAM50_proteins.csv
+
+1. File: 77cancerproteomesCPTACitraq.csv
+  -RefSeqaccessionnumber: RefSeq protein ID (each protein has a unique ID in a RefSeq database)
+  -gene_symbol: a symbol unique to each gene (every protein is encoded by some gene)
+  -gene_name: a full name of that gene
+  -Remaining columns: log2 iTRAQ ratios for each sample (protein expression data, most important), three last columns are from healthy individuals
+  
+2. File: clinicaldatabreast_cancer.csv
+  -First column "Complete TCGA ID" is used to match the sample IDs in the main cancer proteomes file (see example script).
+  -All other columns have self-explanatory names, contain data about the cancer classification of a given sample using different methods. 
+  
+3. File: PAM50_proteins.csv
+  -Contains the list of genes and proteins used by the PAM50 classification system. 
+  -The column RefSeqProteinID contains the protein IDs that can be matched with the IDs in the main protein expression data set.
+
+############################################################################################################################################
+
+- Provided installation statements for all packages 
+- Importing all required libraries
+
+```{r}
+#install.packages("stabs")
+# install.packages("factoextra")
+# install.packages("NbClust")
+# install.packages("ggfortify")
+# install.packages("glmnet")
+# install.packages("foreign")
+# install.packages("ggplot2")
+# install.packages("MASS")
+# install.packages("Hmisc")
+# install.packages("reshape2")
+# install.packages("randomForest")
+# install.packages("data.table")
+# install.packages("mlr")
+# intsall.packages("caret")
+# install.pacakges("dplyr") # data manipulation
+# install.packages("readr") # data input and manipulation
+# install.packages("caret) #select tuning parameters
+# install.packages("MASS") # contains the data
+# install.packages("DataExplorer") #data set visualization
+# install.packages("nnet") # used for Multinomial Classification 
+# install.packages("readr") #assist with text manipulation
+# install.packages("kernlab") #assist with SVM feature selection
+# install.packages("class") # used for an object-oriented style of programmin
+# install.packages("KernelKnn") # used for K- Nearest-Neighbors method
+# install.pacakges("nnet") # Used for Neural Net
+# install.packages("e1071") #supports vector machine algorithm
+# install.packages("forecast") # for model prediction
+# install.pacakges("rpart") #construct recursive partitions for classification
+# install.packages("neuralnet")
+# install.packages("NbClust")
+# install.packages("psych")
+# install.packages("pheatmap")
+# install.packages("OneR")
+# install.packges("naivebayes")
+# install.packages("dplyr")
+# install.packages("ggplot2")
+# install.packages("psych")
+# install.packages("tidyverse")
+# install.packages("assertr")
+# install.packages("knitr")
+# install.packages("psych")
+# install.packages("caret")
+# install.packages("e1071")
+# install.packages("C50")
+# install.packages("gmodels")
+# install.packages("pROC")
+# install.packages("caTools")
+```
+
+
+- Importing all required libraries
+
+```{r, message = FALSE}
+#loading required libraries
+library(stabs)
+library(factoextra)
+library(NbClust)
+library(ggfortify)
+library(glmnet)
+require(foreign)
+require(ggplot2)
+require(MASS)
+require(Hmisc)
+require(reshape2)
+library(randomForest)
+library(data.table)
+library(mlr)
+library(caret)
+library(dplyr) # data manipulation
+library(readr) # data input and manipulation
+library(caret) #select tuning parameters
+library(MASS) # contains the data
+library(DataExplorer) #data set visualization
+library(nnet) # used for Multinomial Classification 
+library(readr) #assist with text manipulation
+library(kernlab) #assist with SVM feature selection
+library(class) # used for an object-oriented style of programmin
+library(KernelKnn) # used for K- Nearest-Neighbors method
+library(nnet) # Used for Neural Net
+library(e1071) #supports vector machine algorithm
+library(forecast) # for model prediction
+library(rpart) #construct recursive partitions for classification
+library(neuralnet)
+library(NbClust)
+library(psych)
+library(pheatmap)
+library(OneR)
+library(naivebayes)
+library(dplyr)
+library(ggplot2)
+library(psych)
+library(pROC)
+library(tidyverse)
+library(assertr)
+library(knitr)
+library(psych)
+library(caret)
+library(e1071)
+library(C50)
+library(gmodels)
+library(pROC)
+library(caTools)
+library(ggplot2)
+library(GGally)
+library(ipred)
+```
+
+
+## 1.Data Acquisition and manipulation
+- for importing data, I used the read.csv() function 
+- Later, I combined all the datasets into one
+- Converted the patients id to one format 
+- used the head(), str(), dim(), glimpse(), summary() to explore the dataset
+
+######################################################
+### Data import - PAM50_proteins.csv####
+#####################################################
+First steps: importing the data and getting the data set into a workable format.
+list of genes and proteins
+```{r}
+#Importing data which has list of genes and proteins
+gene_proteins <- read.csv("/Users/sanjanagorlla/Desktop/multiclass-classfication/BREAST-CANCER-SUBTYPE/PAM50_proteins.csv")
+# 100 rows and 4 columns 
+head(gene_proteins)
+tail(gene_proteins)
+str(gene_proteins)
+dim(gene_proteins)
+glimpse(gene_proteins)
+summary(gene_proteins)
+```
+
+######################################################
+### Data import - clinicaldatabreast_cancer.csv ####
+#####################################################
+main cancer dataset (has information about patients suffering from each sub-type classified based on PAM50.mRNA)
+```{r}
+clinical <- read.csv("/Users/sanjanagorlla/Desktop/multiclass-classfication/BREAST-CANCER-SUBTYPE/clinical_data_breast_cancer.csv")
+# 105 obseravtions  and 30 columns
+head(clinical)
+tail(clinical)
+summary(clinical)
+dim(clinical)
+clinical$PAM50.mRNA
+str(clinical)
+summary(clinical)
+```
+
+######################################################
+### Data import - 77_cancer_proteomes_CPTAC_itraq.csv ####
+#####################################################
+
+The following datset has information about the protein expression data
+
+```{r}
+proteomes <- read.csv("/Users/sanjanagorlla/Desktop/multiclass-classfication/BREAST-CANCER-SUBTYPE/77_cancer_proteomes_CPTAC_itraq.csv")
+# 12553 observations(proteins) and 86 columns
+head(proteomes)
+tail(proteomes)
+dim(proteomes)
+```
+# Combining the datasets
+- Two data sets need to be combined before analysis
+- using the cbind()
+- new column was formed in each data set
+- the two data sets were connected based on this new column
+
+```{r}
+# Transposing the proteome matrix will result in rows rather than columns of observations.
+## save rownames
+# RefSeq_accession_number : ID of proteins
+n <- proteomes$RefSeq_accession_number
+#Transpose all columns except the first three
+proteomes <- as.data.frame(t(proteomes[,4:86]))
+colnames(proteomes) <- n
+#Row names in the first column,
+proteomes <- cbind(rownames(proteomes), data.frame(proteomes, row.names=NULL))
+colnames(proteomes)[1] <- "Complete.TCGA.ID"
+```
+
+
+# Manipulating the format 
+working with the Patient IDs :
+- Unfortunately, the patient IDs in the clinical dataset and the proteomic data set have different formats. 
+- To enable combining of the two data sets on this variable, this piece of code reformats the id in the clinical data set.
+- defined the code which does the job
+- used sapply() to implement the function defined 
+
+```{r}
+# To enable the combining of data sets, Complete.TCGA.ID is being reorganized into a clinical format.
+# Defining the restructuring formula:
+
+get.clinical.id <- function(proteome.id) {
+  x = substr(proteome.id, 4, 7)
+  y = substr(proteome.id, 0, 2)
+  paste("TCGA",y,x,sep="-")
+}
+
+#sapply to proteomes' id column
+proteomes$Complete.TCGA.ID <- sapply(proteomes$Complete.TCGA.ID, get.clinical.id)
+proteomes_all <- proteomes
+
+```
+    
+
+•	Question 2 : how do you plan on assessing data quality and deal with missing values?
+ANSWER : I have explored the proteomes data set using head(), dim(), str(),  dim(), glimpse(),  summary()  functions
+               
+               
+• Question 3 : what strategy are you using for data imputation and why? if the data set has no missing data, can you randomly remove data and then impute the data and compare performance of your algorithms with imputed vs full data? why do they differ? how do they differ?
+
+I have used plot intro() from the DataExplorer package to check if the missing values are present. There are 10% of missing values in the dataset.Discarded variables with more than 25% of the data missing because they wouldn't be significant for further research. Used the mean imputation method, imputed the NA values with the mean of a specific column for the remaining variables with missing data.
+              
+              
+# Exploring the dataset merging and manipulating the datasets
+After merging and manipulating the datasets retrieved - The proteome data set is the final one and to be used in the further analysis
+using the head str dim glimpse summary functions, the dimensions of the data can be observed
+
+```{r}
+#head(proteomes)
+#dim(proteomes)
+#tail(proteomes)
+#summary(proteomes)
+#glimpse(proteomes)
+#str(proteomes)
+```
+
+
+
+• Question :  how do you assess normality, distribution, skew -- and does it matter for your algorithms?
+To predict the cancer sub-type correctly using the proteome data for each patient, I am going to implement following algorithms (SVM, Neural Networks, Naive Bayes and Random forests)  : I am going to assess the distribution of the data using histograms and have built pair.panels() plot. The algorithms  which I am going to use does not assume normality (SVM, Neural Networks,Naive Bayes and random forests) and works well regardless of the distribution. The dataset is reasonably well balanced, although HER2 is slightly underrepresented
+
+
+##############################
+### Data Exploration ###
+##############################
+1. exploratory data plots - plot_intro(), ggplots after the feature selection
+2. detection of outliers for continuous features - box(), defined outlier() to detect the outliers
+3. correlation/collinearity/chi-squared analysis - cor(), 
+4. evaluation of distribution - barplots, histograms, boxplots for each subtype, pair.panels() plot
+
+
+•  what kinds of exploratory data analysis and visualization do you plan on doing?
+
+## 2. Data Exploration 
+
+- I have used plot_intro function from DataExplorer package
+- plot_intro provides an insight of what type of data is present along with that it 
+  provides the information about missing values
+- plotted a graph to show the proportion of missing data for each variable.
+- Apart from that, I have used str and summary to understand the structure of the data present
+- Discarded variables with more than 25% of the data missing because they wouldn't be significant for further research.
+- Used the mean imputation method, imputed the NA values with the mean of a specific column for the remaining variables with missing data.
+- After cleaning the data, using the ggplot() I have analyzed the distribution of each subtype in the dataset
+
+
+1. exploratory data plots: I used plot intro() from the DataExplorer package. plot intro gives an understanding of the sort of data present as well as information about missing values. In addition, I have used str() and summary() to comprehend the data's structure.
+
+
+```{r}
+#Visualizing structure of the data set
+plot_intro(proteomes)
+```
+
+It is essential to explore the clinical dataset as it has all the information about the pateints 
+
+```{r}
+clinical$Age.at.Initial.Pathologic.Diagnosis <- as.numeric(clinical$Age.at.Initial.Pathologic.Diagnosis) # the histogram distribution would only work with numerical data
+h1 <- hist(clinical$Age.at.Initial.Pathologic.Diagnosis)
+
+b1<- barplot(table(clinical$ER.Status), col=c("blue", "red", "green"), main = "ER Status")
+
+b2<- barplot(table(clinical$PR.Status), col=c("red", "green"), main = "PR Status")
+
+b3<- barplot(table(clinical$HER2.Final.Status), col=c("blue", "red", "green"), main = "HER2 Final Status")
+
+b4<- barplot(table(clinical$Tumor..T1.Coded), col=c("red", "green"), main = "Tumor--T1 Coded")
+
+b5<- barplot(table(clinical$Node.Coded), col=c("red", "green"), main = "Node-Coded")
+
+b6<- barplot(table(clinical$Metastasis.Coded), col=c("blue", "red", "green"), main = "Metastasis-Coded")
+
+b7<- ggplot(clinical,aes(x= `PAM50.mRNA`,fill=`PAM50.mRNA`))+geom_bar()+theme(legend.position = "none")
+b7
+```
+
+
+# Missing Values
+
+This plot_intro() plot shows that the dataset has missing observations.
+we can know the count of na's from summary() and also colSums()
+
+```{r}
+# colSums(is.na(proteomes))
+# I have already used the sumarry() in the previous section
+```
+
+
+• how do you plan on assessing data quality and deal with missing values? what strategy are you using for data imputation and why? 
+
+
+According to the plot we see that we have 10% of missing values in the dataset. Without suffering too much of a loss, we can exclude all variables with >25 percent missing data. Using the mean, the remaining missing data can be imputed (a more sophisticated form of imputation would be preferable but is quite computationally expensive and we dont have a huge amount of missing data, so I stuck with means in my analysis).
+
+1. Discarded variables with more than 25% of the data missing because they wouldn't be significant for further research.
+2. Used the mean imputation method, we impute the NA values with the mean of a specific column for the remaining variables with missing data.
+(for which i have implemented the for-loop which did the job)
+
+Step 1 - Missing data : The code below counts missing data by column and plots a graph to show the proportion of missing data for each variable.
+
+```{r}
+#looking for proteomes with many NAs
+naCounts <- colSums(is.na(proteomes)) / nrow(proteomes)
+
+#plotting missing data proportions
+
+plot(sort(naCounts, decreasing = TRUE), col ="blue", type = 'h', xlab = "index of proteome", ylab="proportion of missing data", main = "Propotion of missing data for each proteome") 
+
+#how many have more than 25% missing data
+length(naCounts[naCounts>0.25])
+```
+
+
+Without suffering too much loss, we can exclude all variables with >25% missing data. Using the mean, the remaining missing data can be imputed (a more sophisticated form of imputation would be preferable but is quite computationally expensive and we dont have a huge amount of missing data, so I stuck with means in my analysis).
+
+
+Step 2: 
+```{r}
+#remove variables with >25% missing data
+proteomes <- proteomes[ , colSums(is.na(proteomes))  / nrow(proteomes) < 0.25] #removing variables with >10% missing data
+#loop to impute means for remaining missing data
+for (i in which(sapply(proteomes, is.numeric))) {
+    proteomes[is.na(proteomes[, i]), i] <- mean(proteomes[, i],  na.rm = TRUE)
+}
+```
+
+
+Now the dataset is clean, Lets explore if there are any missing values
+
+```{r}
+dim(proteomes) # a total of 2251 variables are removed 
+```
+
+```{r}
+plot_intro(proteomes)
+```
+
+The proteome dataset is now clean, Therefore, I have now joined the proteome dataset and clinical datset using inner_join() from dplyr package. 
+
+```{r}
+#inner join on data to create full data set
+data <-  inner_join(clinical, proteomes, by = "Complete.TCGA.ID")
+#replacing lengthy col name
+colnames(data)[3] <- "diag_age"
+```
+
+
+Exploring the final datset
+
+```{r}
+dim(data)
+#head(data)
+#tail(data)
+#str(data)
+```
+
+# Evaluation of distribution 
+
+The main idea of the project is to check if the proteomic datset can classify the subtype of breast cancer.Therefore, it is important to check the number of observations in each subtype
+The plot below shows how many patients have each subtype of breast cancer.
+```{r}
+#Barplot of subtypes
+ggplot(data, aes(PAM50.mRNA, col = PAM50.mRNA, fill = PAM50.mRNA, alpha=0.7)) + geom_bar() + ggtitle("Proportion of patients with each cancer subtype")+ geom_text(stat='count', aes(label=..count..), vjust=-1)
+```
+
+Therefore , They are reasonably well balanced, although HER2 is slightly underrepresented. 
+
+
+
+
+
+3. Data Cleaning & Shaping
+
+### Data Imputation
+- Data imputation is already done in previous chunks
+- Mean imputation for proteome dataset is done 
+
+### Proper Encoding of Data
+- Encoding was done for only PAM50.mRNA column
+- PAM50.mRNA is categorized into four  types "Basal.like", "HER2-enriched", "Luminal.A", "Luminal.B"
+
+### Normalization/Standardization
+- Normalizing the data does not make any difference in the predictions as the protein expression data already ranges on  -1 0 1 scale
+### Feature engineering - PCA
+- Principal component analysis is also done using prComp function
+- Principal components are taken into consideration only when the cumulative variance is greater
+  than 85%
+- To get the cumulative variance of 85 or greater, I was forced to select 48 components
+- But i want to know the list of features(proteins) important of the classification of breast cancer sub-type, Because of this I haven't used Principal components for my models
+### Feature selection - repeated lasso regression
+- I selected variables using repeated lasso regression as my method.
+-A total of 30 proteins were selected over more than 20 times.
+- These proteins are taken into consideration for further analysis
+- Checked the distribution of cancer subtype using these proteins 
+
+
+
+```{r}
+################################
+### Feature engineering: PCA ###
+################################
+
+#Performing PCA on the dataset
+data_PCA <- prcomp(data[,31:ncol(data)], center = T, scale = T)
+#Printing Principal components
+#print(data_PCA)
+#Summary of Principal components
+#summary(data_PCA)
+#str(data_PCA)
+#Plotting variance plot of the Principal components
+screeplot(data_PCA, type = "l", main = "Plot of the Principal Components")
+```
+
+
+• how will you select the features? will you use PCA?
+I will use repeated lasso regression to select the features. When the cumulative variance exceeds 85%, only principal components are taken into account. I had to choose 48 components for the cumulative variance to be 85 or higher. However, I'm curious about the list of characteristics (proteins) crucial to the classification of breast cancer subtypes. As a result, I haven't employed principal components in my models.
+
+• what kind of feature engineering will you use? will you add new derived features?
+I have used feature selection technique. No, i havent added any new features
+
+• what do you plan on predicting?
+predict the breast cancer subtype using the set of proteins selected using feature selection(repeated lasso regression)
+
+• what kind of normalization, standardization, regularization, or transformation do you plan on using and why?
+Normalizing the data does not make any difference in the predictions as the protein expression data already ranges on  -1 0 1 scale
+
+
+# Feature selection : repeated lasso regression
+
+The PAM50 genetic test is used to identify the subtype of breast cancer. A list of proteins linked to the PAM50 genes is included in this data collection. Therefore, it would appear likely that these are the best factors to utilize when categorizing breast cancer subtypes.
+To test if machine learning techniques might be used to find a set of proteins with as good or higher prediction power at classifying cancer subtypes, I chose an approach that was independent of biology.
+I'm selecting variables using repeated lasso regression as my method. The data set is reduced via lasso regression, which also creates a sparse set of predictor variables. However, because of the stochastic nature of the reduction, the findings are not always reliable. To get around this, I conducted 100 iterations of the lasso regression and prioritized the variables according to how frequently they were used in the final model.
+```{r}
+# Defining  a function that performs lasso regression again and returns the chosen model variables
+LassoSub=function(k=1, Xdata, Ydata){
+  set.seed(k)
+  s=sample(nrow(data), size=0.8*nrow(data))
+  Xsub=Xdata[s, ]
+  Ysub=Ydata[s]
+  model.sub=cv.glmnet(x=Xsub, y=Ysub, alpha=1, family="multinomial") #cross validated lasso
+  coef.sub=coef(model.sub, s='lambda.1se')[-1] #using lambda +1se hyperparameter value for parsimony
+  return(coef.sub)
+}
+```
+
+
+```{r warning=FALSE, message=FALSE}
+options(warn = -1) #turn off warnings
+#Run model 100 times and save results
+niter=100
+lasso.stab=sapply(1:niter, FUN=LassoSub, Xdata=as.matrix(data[,31:ncol(data)]), Ydata=as.matrix(data[,21]))
+
+#create a matrix of all predictor variables
+stability_matrix <- matrix(nrow=length(lasso.stab[[1]]),ncol=length(lasso.stab))
+rownames(stability_matrix) <- rownames(lasso.stab[[1]])
+
+#loop through to put list contents into matrix
+for (i in 1:300){
+  temp.data.frame <- as.matrix(lasso.stab[[i]])
+  stability_matrix[,i] <- temp.data.frame
+}
+
+stability_matrix <- ifelse(stability_matrix != 0, 1, 0) #Replacing beta values with binary 1/0 (selected/not selected)
+stability_matrix <- stability_matrix[2:nrow(stability_matrix),] #remove intercept value
+stable_variables <- as.data.frame(rowSums(stability_matrix)) #create data frame with count of how many times each variable is selected for a model
+stable_variables$protein <- rownames(stable_variables) #create column of variable names
+
+colnames(stable_variables)[1] <- "times_selected" #assign appropriate column name
+stable_variables <- stable_variables[!is.na(stable_variables$times_selected),]  #remove NAs
+stable_variables <- stable_variables[stable_variables$times_selected != 0,] #remove all variables that were never selected
+
+stable_variables <- stable_variables[order(-stable_variables$times_selected),] #ordering by number of times selected
+
+```
+
+# visualizing the selected features
+
+```{r warning=FALSE, message=FALSE}
+#plotting stable variables
+ggplot(stable_variables[1:30,], aes(x=reorder(as.factor(protein),-abs(times_selected),mean), y=times_selected, col =reorder(as.factor(protein),-abs(times_selected),mean), fill =reorder(as.factor(protein),-abs(times_selected),mean))) + geom_col(show.legend = FALSE, alpha = 0.6) + theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.text=element_text(size=10)) + xlab("Protein") + ylab("Times selected") 
+
+STABVARS <- stable_variables$protein[1:30]
+
+STABVARS.ind <- which(colnames(data) %in% STABVARS)
+```
+
+
+
+We now have a collection of variables that the lasso regression repeatedly chose. Due to the size of the data set, instability still exists after 100 iterations, and only roughly 30 variables were chosen more frequently than 20% of the time. These are the factors that we will classify using.
+
+An indication of how well the chosen protein variables will be able to categorize the subtypes will be provided by visualizing the relative amounts of the most-selected protein in patients with each subtype of cancer:
+
+```{r}
+library(gridExtra)
+for (i in 1:length(STABVARS[1:5])){
+print(ggplot(data, aes_string("PAM50.mRNA", STABVARS[i], col="PAM50.mRNA", fill="PAM50.mRNA")) + geom_boxplot(alpha=0.3) + ggtitle(STABVARS[i]))
+}
+
+```
+
+This is promising. There are clear differences in the levels of each of the selected proteins.
+
+
+Now that i have slected the proteins, I am going to create a subset of data with the selected features(predictor variables) and response variable only and stored as final_data
+```{r}
+final_data <- data[,c(21, STABVARS.ind)]
+head(final_data)
+dim(final_data)
+tail(final_data)
+```
+
+# Checking the distribution of 30 proteins - built histogram using lapply()
+
+```{r}
+lapply(final_data[, 2:ncol(final_data)], hist)
+```
+
+
+### Detection of outliers and data imputation 
+- On observing the box plot of 30 column, I got to know that it has a few outliers
+- I have also created the function which can identify the presence of outliers in each varaible
+- I removed these outliers and imputed them with median value
+
+```{r}
+lapply(final_data[, 2:ncol(final_data)], boxplot)
+```
+
+```{r}
+# function for detection of outliers in each column
+outliers <- function(x) 
+{
+  for(i in 1:ncol(x))
+  {
+    sd_i <- sd(x[,i])
+    mean_i <- mean(x[,i])
+    
+    out = x[x[,i] > 3*sd_i+mean_i | x[,i] < mean_i-3*sd_i, ]
+    if(nrow(out) > 0)
+    {
+      print(colnames(x)[i])
+      paste("The outliers are -", out)
+    }else
+    {
+      print(paste("No outliers for",colnames(x)[i]))
+    }
+  }
+}
+```
+
+```{r}
+# Detecting outliers in the dataset
+outliers(final_data[,c(2:ncol(final_data))])
+```
+
+```{r}
+# replacing outliers with median imputation
+outlier <- function(x) {
+ x[x < quantile(x,0.25) - 1.5 * IQR(x) | x > quantile(x,0.75) + 1.5 * IQR(x)] <- median(x)
+ x
+}
+```
+
+```{r}
+data_out <- as.data.frame(lapply(final_data[,c(2:ncol(final_data))], outlier))
+data_norm <- data_out
+data_norm$PAM50.mRNA <- final_data$PAM50.mRNA
+```
+
+
+
+
+
+### Feature Engineering -
+I have not derived new features.
+- converted the PAM50.mRNA as a factor type as this is a response variable. for this I have used factor()
+
+```{r}
+# changing the names
+data_norm$PAM50.mRNA[which(data_norm$PAM50.mRNA == "Basal-like")] = "Basal.like"
+data_norm$PAM50.mRNA[which(data_norm$PAM50.mRNA == "HER2-enriched")] = "HER2.enriched"
+data_norm$PAM50.mRNA[which(data_norm$PAM50.mRNA == "Luminal A")] = "Luminal.A"
+data_norm$PAM50.mRNA[which(data_norm$PAM50.mRNA == "Luminal B")] = "Luminal.B"
+```
+
+```{r}
+# converting PAM50.mRNA to a factor type
+data_norm$PAM50.mRNA <- factor(data_norm$PAM50.mRNA)
+```
+
+
+
+
+# Correlation/Collinearity analysis
+- Numerical data is required for calculating correlation, so I have used only numerical variables to interpret the correlation
+- Correlation plot is shown for whole data
+- I have shown the plot of correlation between numeric features
+- I also tried pairs.panels function for correlation but since there are more than 15 features. Plots are not clearly visible pairs.panels(data_n)
+- Thefore, build a plot with top ten features
+- I cannot apply chi-square test as the datapoints should be non-zero and non-negative
+
+```{r}
+#Creating a correlation plot of whole dataset
+cormat <- round(cor(data_norm[,1:30]),2)
+cormat
+```
+
+We can say that the proteins are not highly correlated 
+
+```{r}
+melted_cormat <- reshape2::melt(cormat)
+```
+
+Visualizing the correlation plot 
+```{r}
+ggplot(data = melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+   name="Pearson\nCorrelation") +
+  theme_minimal()+ 
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed()+xlab("")+ylab("")+ggtitle("Correlation plot")
+```
+
+Top 5 variables and response variable
+```{r}
+top_variables <- c("PAM50.mRNA", "NP_660208", "NP_005970", "NP_004453", "NP_004522", "NP_001258898")
+
+#"NP_001160163", "NP_003767", "NP_542785", "NP_060866", "NP_004388"
+
+data_viz= data_norm[,(names(data_norm) %in% top_variables)]
+```
+
+
+```{r}
+pairs(data_viz)
+```
+
+
+```{r}
+pairs.panels(data_viz)
+```
+
+
+```{r}
+ggpairs(data_viz)
+```
+
+The variable names are displayed on the outer edges of the matrix.
+The boxes along the diagonals display the density plot for each variable.
+The boxes in the lower left corner display the scatterplot between each variable.
+The boxes in the upper right corner display the Pearson correlation coefficient between each variable. The variables are not correlated but according to the distribution they have normal distribution
+
+
+
+
+
+
+4. Model Construction & Evaluation
+
+•  which algorithms will you use and why? naive bayes, knn, decision trees, rules, log regression, multi regression, lasso, ridge, neural      net, svm, clustering
+
+• is the algorithm compatible with the features you have in the data set?
+
+As this is a multi-class classification, I am going to use SVM, Neural Networks, Decison tree and Naive Baye's.
+1. SVM : I chose this algorithm as it does complex data transformations depending on the selected kernel function and based on that  transformations, it tries to maximize the separation boundaries between the data points depending on the labels or classes defined. SVM works well for binary classification. But, For multi-class classification, the same principle for binary classfication is utilized after breaking down the multiclassification problem into multiple binary classification problems. The main reason behind choosing this alogirthm is it works well with expression data. As I am dealing with the protein expression data, this algorithm will work well and compatiable with the features in the data-set.
+The kernel function is used where the complexity of the problem is high and data is linearly separable. where it adds multiple polynomial features at a very high degree this way it prevents the computational complexity or burden that comes along adding
+multiple features to data. The dependencies of the variable are always taken into consideration
+
+2. Neural Networks : I chose this algorithm as this works well with complex datset. The output layer contains one neuron per class rather than just one neuron. If the dataset contains four classes, then the output layer has four neurons. Therefore, it works well with multi class classfication problems. 
+
+3.  Random Forests : I chose this algorithm as this a classifier is a systematic approach for multiclass classification. It poses a set of questions to the dataset (related to its attributes/features). The benefit of this method is that it can handle missing
+values and maintains accuracy for missing data. It won't over fit the model. t handles dataset with higher dimensionality
+
+4. Naive bayes : I chose naive bayes algorithm as this is highly compatiable for protein expression datset and the calculations of the probabilities for each class are simplified to make their calculations tractable.
+
+  
+• how do you compare and evaluate the performance of the algorithms? R-Squared? MAD, MSE, RMSE? AIC? AUC? why are they that way?
+
+As this is a classification problem, Classification  Metrics are :Confusion Matrix, Precision, Recall, F1-score and AUC
+I chose these metrics as it is a well-balanced datasetand these metrics works well. 
+
+
+• how do you choose training vs validation data? why?
+Data splitting is done in 70:20 ratio. Partition is created using createDataPartition function. As it is a well balanced datset. 
+
+• can you and should you use k-fold cross-validation?
+- k-Fold Cross Validation is done for the whole dataset
+- I have used k = 10 which means 10 folds take place along with 10 repetitions
+- For testing the data, I have used 3 models to test the k-fold CV 
+
+• how would you build a stacked ensemble model? is it a better model? can you use boosting or bagging? or build a stacked learner?
+
+
+• how will you communicate the results of your algorithms?
+I have used  confusionMatrix function to interpret the results of the algorithm 
+
+### Creation of training & validation subsets
+- Data splitting is done in 70:20 ratio
+- Partition is created using createDataPartition function
+
+### Construction of at least three related models
+- I built 4 models which are as follows: 
+  * Support Vector Machine (svm())
+  * Neural Network (neuralnet())
+  * Naive Bayes (naive_bayes())
+  * Random Forest (randomForest())
+  
+### Evaluation of fit of models with holdout method
+- For model evaluation,I have calculated accuracy of each model using the
+  confusionMatrix function. I have also compared the sensitivity, specificity, precision, recall  and AUC of classification models 
+
+For a balanced dataset, we use a confusion matrix and the derived performance metrics; accuracy, precision, recall, F1-score and AUC
+
+
+```{r}
+#creating test/train split index
+set.seed(1000)
+samp <- createDataPartition(data_norm$PAM50.mRNA, p = 0.7, list = FALSE)
+train <- data_norm[samp, ]
+test<- data_norm[-samp, ]
+```
+
+```{r}
+#exploring training dataset
+head(train)
+dim(train)
+```
+
+
+```{r warning=FALSE, message=FALSE}
+head(test)
+dim(test)
+```
+
+
+
+
+
+
+# Model building
+As this is a multi-class classification, I am implement 4 models -  SVM, Neural Networks, Naive Baye's and Random forests
+
+## SVM linear classifier
+Support Vector Machines are generalized extension of a maximal margin classifier, SVM are intended for the binary classification setting when there are two classes. However, this designed intention does not disqualify from using the SVM method with cases of more than two classes. SVM determines the best line separator by identifying closest points in Convex hull, a hyperplane bisects the closest point to the convex hull. The support vector classifies a test observation depending on which side of a plane it lies; this is based on boundaries-support vectors. SVM method allows some observations to be on the incorrect side of the margin and in some cases the incorrect side of the hyperplane in the interest of performing better in classifying the remaining observations further away from the hydroplane. This is known as a soft margin classifier; training observations can violate this area. Advantages of using a SVM model are; can be adapted to work well with nonlinear boundaries, uses kernels, less overfitting of data, performs well with clear margin of separation among data.
+The kernel function is used where the complexity of the problem is high and data is linearly separable. where it adds multiple polynomial features at a very high degree this way it prevents the computational complexity or burden that comes along adding
+multiple features to data. The dependencies of the variable are always taken into consideration
+
+```{r warning=FALSE, message=FALSE}
+svm_model1 <- svm(PAM50.mRNA~., data= train, type="C-classification", kernel = 'linear')
+svm_model1
+svm_pred <- predict(svm_model1, newdata = test)
+confusionMatrix(svm_pred, factor(data_norm$PAM50.mRNA[-samp]), mode = "everything")
+accuracy_svm <-confusionMatrix(test$PAM50.mRNA, svm_pred)$overall["Accuracy"]
+```
+
+
+
+# Model evaluation for SVM:  
+1. Accuracy : The overall model accuracy of SVM model is 81%
+2. Precision,Recall,F1 :
+The Precision,Recall,F1 for Basal.like class is 0.7143,  1.0000, 0.8333
+The Precision,Recall,F1 for HER2.enriched class is  1.00000,  0.33333 , 0.80000   
+The Precision,Recall,F1 for Luminal.A class  is 0.8571, 1.0000, 0.9231 
+The Precision,Recall,F1 for Luminal.B class  is 0.8000, 0.5714, 0.6667  
+3. Sensitivity and Specificity:
+The Sensitivity and Specificity for Basal.like class is 1.0000 and   0.8750
+The Sensitivity and Specificity for HER2.enriched  class is  0.66667 and   1.00000
+The Sensitivity and Specificity for  Luminal.A is   1.0000 and   0.9333
+The Sensitivity and Specificity for Luminal.B class is  0.5714 and   0.9286
+
+4. The Kappa statistic: The kappa value for this model is 0.7399 which states that it is a good agreement.
+
+
+Macro-averaged Metrics :
+The per-class metrics can be averaged over all the classes resulting in macro-averaged precision, recall and F-1.
+```{r}
+# macro-averaged precision
+precision_svm <- c(0.7143, 1.00000,0.8571, 0.8000)
+macro_precision_svm <- mean(precision_svm)
+# macro-averaged recall
+recall_svm <- c(1.0000, 0.66667, 1.0000, 0.5714)
+macro_recall_svm <- mean(recall_svm)
+# macro-averaged F-1
+F1_svm<- c(0.8333,0.80000, 0.9231, 0.6667)
+macroF1_svm <- mean(F1_svm)
+macro_avg_svm <- data.frame( macro_precision_svm, macro_recall_svm, macroF1_svm)
+macro_avg_svm
+```
+
+AUC for SVM
+
+```{r warning=FALSE, message=FALSE}
+svm_auc <- multiclass.roc(test$PAM50.mRNA, as.ordered(svm_pred))
+auc(svm_auc)
+
+```
+
+The AUC of SVM model is : 0.7897
+
+
+
+```{r}
+Name_metrics <- c("Accuracy", "Precision", "Recall", "F-1", "AUC", "Kappa")
+values_svm <- c(0.8095 , 0.84285,	0.8095175,	0.805775,0.7897, 0.7399  )
+metrics_svm <- data.frame(Name_metrics, values_svm)
+print (metrics_svm)
+```
+
+
+
+
+
+###########################
+### Neural Networks ###
+###########################
+
+Inspired by biological neural networks, the Neural Network method is a supervised machine learning algorithm which consists of units arranged in layers which coverts an input vector (independent variable) into a prediction/classification. "The algorithm learns a function by training on a dataset without prior knowledge about the dataset."
+
+
+```{r warning=FALSE, message=FALSE}
+# I have tried out many hidden layers but got optimal results with hidden layer = 5
+neuralnet_model2 <- train(PAM50.mRNA~., data= train, hidden = 5, method = "nnet")
+nnpred_model2 <- predict(neuralnet_model2, newdata= data_norm[-samp,])
+```
+
+
+```{r warning=FALSE, message=FALSE}
+#viewing confusion matrix
+confusionMatrix(nnpred_model2, factor(data_norm$PAM50.mRNA[-samp]), mode = "everything")
+```
+
+
+
+# Model evaluation for NN
+1. Accuracy : The overall model accuracy of Neural network  model is 81%
+2. Precision, Recall, F-1 :
+The Precision,Recall,F1 for Basal.like class is 0.8333,  1.0000 ,  0.9091
+The Precision,Recall,F1 for HER2.enriched class is 1.00000,  0.33333  , 0.50000
+The Precision,Recall,F1 for Luminal.A class  is 0.7500,   1.0000, 0.8571 
+The Precision,Recall,F1 for Luminal.B class  is 0.8333, 0.7143,0.7692
+3. Sensitivity and Specificity
+The Sensitivity and Specificity for Basal.like class is 1.0000 and   0.9375
+The Sensitivity and Specificity for HER2.enriched  class is  0.33333 and   1.00000
+The Sensitivity and Specificity for  Luminal.A is  1.0000 and   0.8667
+The Sensitivity and Specificity for Luminal.B class is   0.7143 and   0.9286
+
+4. The Kappa statistic: The kappa value for this model is  0.7358  which states that it is a good agreement.
+
+
+Macro-averaged Metrics :
+The per-class metrics can be averaged over all the classes resulting in macro-averaged precision, recall and F-1.
+```{r}
+# macro-averaged precision
+precision_nn <- c(0.8333,1.00000, 0.7500, 0.8333)
+macro_precision_nn <- mean(precision_nn)
+# macro-averaged recall
+recall_nn <- c(1.0000, 0.33333, 1.0000, 0.7143)
+macro_recall_nn<- mean(recall_nn)
+# macro-averaged F-1
+F1_nn<- c(0.9091,0.50000,0.8571,0.7692)
+macroF1_nn <- mean(F1_nn)
+macro_average_nn <-data.frame(macro_precision_nn, macro_recall_nn, macroF1_nn)
+macro_average_nn
+```
+
+
+AUC
+
+```{r warning=FALSE, message=FALSE}
+nn_auc <- multiclass.roc(test$PAM50.mRNA, as.ordered(nnpred_model2))
+auc(nn_auc)
+```
+
+
+
+```{r}
+Name_metrics <- c("Accuracy", "Precision", "Recall", "F-1", "AUC", "Kappa")
+values_nn <- c(0.8095 , 0.85415, 0.7619075, 0.75885,0.8571,0.7358  )
+metrics_nn <- data.frame(Name_metrics, values_nn)
+print (metrics_nn)
+```
+
+
+
+
+
+
+## Naive Baye's
+The Naive Bayes Algorithm is a classifier based on applying Bayes theorem with independent assumptions between features. Meaning that all features in the data set are equally important and independent of one another. Bayesian probability Is rooted in the theory that the likelihood of an event should be based on the evidence across multiple trials. Naïve Bayes uses probabilities to classify groups based on prior probability. One advantage is that Naïve Bayes works with mixed data: nominal, continuous and ordinal variables. Naïve Bayes is fast and effective, handles missing and noisy data well, and requires few records for training and can also work well with large records. Disadvantages of Naïve Bayes is that it assumes that all the data predictors are independent when in data is far from this faulty assumption. Also, estimated probabilities are less reliable than predicted classes.
+
+
+```{r warning=FALSE, message=FALSE}
+nb_model3 <- naive_bayes(PAM50.mRNA ~ ., data = train, usekernel = T) 
+nbpred_model3 <- predict(nb_model3, newdata= data_norm[-samp,])
+#viewing confusion matrix
+confusionMatrix(nbpred_model3 , factor(data_norm$PAM50.mRNA[-samp]), mode = "everything")
+```
+
+# Model evaluation for NB:
+1. Accuracy : The overall model accuracy of Naive Baye's model is 76. 2%
+2. Precision,Recall,F1 :
+The Precision,Recall,F1 for Basal.like class is 0.7500,  0.60000,  0.6667
+The Precision,Recall,F1 for HER2.enriched class is  0.6667, 0.6667, 0.6667
+The Precision,Recall,F1 for Luminal.A class  is 0.7143,  0.8333, 0.71692
+The Precision,Recall,F1 for Luminal.B class  is 0.8571, 0.8571, 0.8571  
+3. Sensitivity and Specificity
+The Sensitivity and Specificity for Basal.like class is 0.60000  and   0.9375
+The Sensitivity and Specificity for HER2.enriched  class is   0.66667  and   0.94444 
+The Sensitivity and Specificity for  Luminal.A is   0.8333  and    0.8667
+The Sensitivity and Specificity for Luminal.B class is  0.8571 and   0.9286
+4. The Kappa statistic: The kappa value for this model is  0.6729 which states that it is a good agreement.
+
+
+Macro-averaged Metrics :
+The per-class metrics can be averaged over all the classes resulting in macro-averaged precision, recall and F-1.
+```{r}
+# macro-averaged precision
+precision_nb <- c(0.7500,0.66667,0.7143,0.8571)
+macro_precision_nb <- mean(precision_nb)
+# macro-averaged recall
+recall_nb <- c(0.6000,0.66667,0.8333,0.8571)
+macro_recall_nb<- mean(recall_nb)
+# macro-averaged F-1
+F1_nb<- c(0.6667,0.66667,0.7692,0.8571)
+macroF1_nb <- mean(F1_nb)
+macro_average_nb <-data.frame(macro_precision_nb, macro_recall_nb, macroF1_nb)
+macro_average_nb
+```
+
+
+AUC
+
+```{r warning=FALSE, message=FALSE}
+nb_auc <- multiclass.roc(test$PAM50.mRNA, as.ordered(nbpred_model3))
+auc(nb_auc)
+```
+
+
+
+```{r}
+Name_metrics <- c("Accuracy", "Precision", "Recall", "F-1", "AUC", "Kappa")
+values_nb <- c(0.7619, 0.7470175, 0.7392675,0.7399175, 0.8857, 0.6729 )
+metrics_nb <- data.frame(Name_metrics, values_nb)
+print (metrics_nb)
+```
+
+
+###########################
+### Random Forest ###
+###########################
+
+Random Forest is an ensemble of decision trees. It builds and combines multiple decision trees to get more accurate predictions. It's a non-linear classification algorithm. Each decision tree model is used when employed on its own. It works well with the multiclass classification.
+
+```{r}
+# Fitting Random Forest to the train dataset
+set.seed(120)  # Setting seed
+classifier_RF = randomForest(x = train[,1:30],
+                             y = train$PAM50.mRNA,
+                             ntree = 500)
+RF_pred <- predict(classifier_RF, newdata = test)
+confusionMatrix(RF_pred, factor(data_norm$PAM50.mRNA[-samp]), mode = "everything")
+```
+
+
+```{r}
+# Plotting model
+plot(classifier_RF)
+# Importance plot
+importance(classifier_RF)
+# Variable importance plot
+varImpPlot(classifier_RF)
+```
+# Model evaluation for RF:
+1. Accuracy : The overall model accuracy of  model is 61.9%
+2. Precision,Recall,F1 :
+The Precision,Recall,F1 for Basal.like class is 0.5714 ,  0.8000,  0.6667
+The Precision,Recall,F1 for HER2.enriched class is  1.00000, 0.33333, 0.50000
+The Precision,Recall,F1 for Luminal.A class  is 0.5714,  0.6667, 0.6154
+The Precision,Recall,F1 for Luminal.B class  is 0.6667, 0.5714, 0.6154  
+3. Sensitivity and Specificity
+The Sensitivity and Specificity for Basal.like class is 0.80000  and   0.8125
+The Sensitivity and Specificity for HER2.enriched  class is   0.333333  and 1.00000
+The Sensitivity and Specificity for  Luminal.A is   0.6667  and    0.8000
+The Sensitivity and Specificity for Luminal.B class is  0.5714 and   0.8571
+4. The Kappa statistic: The kappa value for this model is  0.473 which states that it is a good agreement.
+
+
+Macro-averaged Metrics :
+The per-class metrics can be averaged over all the classes resulting in macro-averaged precision, recall and F-1.
+```{r}
+# macro-averaged precision
+precision_rf<- c(0.5714,1.00000, 0.5714, 0.6667)
+macro_precision_rf <- mean(precision_rf)
+# macro-averaged recall
+recall_rf <- c(0.8000, 0.33333,0.6667,0.5714)
+macro_recall_rf<- mean(recall_rf)
+# macro-averaged F-1
+F1_rf<- c(0.6667, 0.50000, 0.6154,0.6154)
+macroF1_rf <- mean(F1_rf)
+macro_average_rf <-data.frame(macro_precision_rf, macro_recall_rf, macroF1_rf)
+macro_average_rf
+```
+
+AUC
+
+```{r warning=FALSE, message=FALSE}
+rf_auc <- multiclass.roc(test$PAM50.mRNA, as.ordered(RF_pred))
+auc(rf_auc)
+```
+
+
+
+```{r}
+Name_metrics <- c("Accuracy", "Precision", "Recall", "F-1", "AUC", "Kappa")
+values_rf <- c(0.619, 0.702375, 0.5928575, 0.599375, 0.7388, 0.4734)
+metrics_rf <- data.frame(Name_metrics, values_rf)
+print (metrics_rf)
+```
+
+# Comparing models 
+By comparing accuracy, precision, recall, f-1, AUC and kappa , 
+Both SVM and the Neural Network model works best for the given datset have approximate same accuracy, precision, recall, f-1, AUC and kappa
+```{r}
+#SVM
+print(metrics_svm)
+#NN
+print(metrics_nn)
+#NB
+print(metrics_nb)
+#RF
+print(metrics_rf)
+```
+
+
+Though the SVM and neural network model achieved an accuracy of 81%, the precision, recall,  AUC, kappa, and f-1 scores of neural network model are higher than SVM 
+
+
+
+
+
+
+
+### Evaluation with k-fold cross-validation
+- k-Fold Cross Validation is done for the whole dataset
+- I have used k = 10 which means 10 folds take place along with 10 repetitions
+- For testing the data, I have used 3 models to test the k-fold CV 
+- Accuracy of each model is printed and based on the observation
+  average accuracy is around 75-80%
+
+
+###############################
+### K-fold Cross Validation ###
+###############################
+#Creating a train function for cross validation 
+#We use k = 10 folds with repeated validation = 10 
+
+
+
+```{r warning=FALSE, message=FALSE}
+fitControl <- trainControl(## 10-fold CV
+                           method = "repeatedcv",
+                           number = 10,repeats = 10,savePredictions = TRUE, summaryFunction = multiClassSummary)
+## SVM
+svm_fit <- train(PAM50.mRNA ~ ., data=data_norm, trControl= fitControl, method="svmLinear")
+## NN
+nn_fit <- train(PAM50.mRNA ~., data= data_norm, 
+               method = "nnet", 
+               trControl = fitControl)
+## NB
+nb_fit <- train(`PAM50.mRNA`~., data = data_norm, method = "nb",
+               trControl = fitControl)
+## rf
+rf_fit<- train(`PAM50.mRNA`~., data = data_norm, method = "rf",
+               trControl = fitControl)
+```
+
+
+
+
+```{r}
+print(svm_fit)
+```
+
+
+
+```{r}
+print(nn_fit)
+```
+
+```{r}
+print(nb_fit)
+```
+
+```{r}
+print(rf_fit)
+```
+
+
+
+Before, K-fold cross validation, The SVM model achieved a accuracy of 76% 
+The neural networks model achieved accuracy of 71% 
+The naive bayes model achieved a accuracy of 76%
+
+k-Fold Cross Validation is done for the whole dataset. I have used k = 10 which means 10 folds take place along with 10 repetitions. For testing the data, I have used 3 models to test the k-fold CV 
+
+(10 fold, repeated 10 times)
+
+1. SVM : 
+                  
+Accuracy - 0.773627
+Kappa   - 0.6904643    
+Mean_F1   -  0.8352319
+Mean_Sensitivity  - 0.75375        
+Mean_Specificity  - 0.9240625
+Mean_Precision    - 0.8312189
+Mean_Recall       - 0.75375 
+
+There's no much change after applying k-fold cross validation
+
+2. Neural Networks :
+
+
+Accuracy -  0.7786581
+Kappa   - 0.6980310   
+Mean_F1   -   0.7569600
+Mean_Sensitivity  - 0.7568452         
+Mean_Specificity  - 0.9250575
+Mean_Precision    - 0.7997022 
+Mean_Recall       - 0.7568452
+
+
+3. Naive baye's :
+Accuracy -  0.7535198
+Kappa   - 0.6617535  
+Mean_F1   -   0.8208433
+Mean_Sensitivity  - 0.7362500        
+Mean_Specificity  - 0.8410706
+Mean_Precision    - 0.9163363
+Mean_Recall       - 0.7362500
+
+
+
+4. Random Forests:
+             
+Accuracy -  0.7795238
+Kappa   - 0.6920946 
+Mean_F1   -   0.8228571
+Mean_Sensitivity  - 0.7362500         
+Mean_Specificity  -  0.9227470
+Mean_Precision    - 0.8331349       
+Mean_Recall       - 0.6891667 
+       
+
+# HYPERPARAMETER TUNING 
+
+1. SVM
+
+The tuning and training of an SVM with a linear kernel is demonstrated in the code below, which also controls crossvalidation for tuning the hyperparameter C.
+
+```{r warning=FALSE, message=FALSE}
+set.seed(10)
+#Configuring train control for cross validation and hyperparameter calibration
+train_control <- trainControl(method="repeatedcv", number=10, repeats=10, savePredictions = TRUE, summaryFunction = multiClassSummary) 
+#Tunegrid for various C values
+grid <- expand.grid(C = seq(0.000001,0.15,0.002))
+set.seed(10)
+svm.lin.mod <- train(PAM50.mRNA ~ ., data=data_norm[samp,], trControl=train_control, method="svmLinear", preProcess = c("center","scale"), tuneGrid =grid, tuneLength = 10)
+svm.predicts <- predict(svm.lin.mod, newdata = data_norm[-samp,])
+confusionMatrix(svm.predicts, factor(data_norm$PAM50.mRNA[-samp]), mode = "everything")
+```
+
+
+
+The SVM model achieved accuracy of 80% after hyper-parameter tuning. Therefore, no much change after tuning
+
+
+
+## NN 
+
+```{r}
+set.seed(5000)
+cctrlR <- trainControl(method = "repeatedcv", number=10, repeats=10, returnResamp = "all", search = "random")
+nn <- train(PAM50.mRNA ~., data= data_norm[samp,], 
+               method = "nnet", 
+               trControl = cctrlR,
+               preProc = c("center", "scale"),
+               trace = FALSE)
+  
+nnpred <- predict(nn, newdata= data_norm[-samp,])
+#viewing confusion matrix
+confusionMatrix(nnpred, factor(data_norm$PAM50.mRNA[-samp]), mode = "everything")
+```
+
+The model achieved accuracy of 80.1% after hyper parameter tuning 
+
+
+
+
+
+```{r warning=FALSE, message=FALSE}
+nb1 <- train(`PAM50.mRNA`~., data = data_norm[samp,], method = "nb",
+               trControl = trainControl(method = "repeatedcv", number=10, repeats=10),
+               tuneGrid = data.frame(usekernel = TRUE, fL = 0.5, adjust = 5))
+bps <- predict(nb1, newdata=data_norm[-samp,])
+nbpred <- predict(nb1, newdata= data_norm[-samp,])
+
+#viewing confusion matrix
+confusionMatrix(nbpred, factor(data_norm$PAM50.mRNA[-samp]), mode = "everything")
+```
+
+The model achieved 71.4% accuracy after hyper parameter tuning 
+
+
+
+
+```{r}
+rb <- train(`PAM50.mRNA`~., data = data_norm[samp,], method = "rf",
+               trControl = trainControl(method = "repeatedcv", number=10, repeats=10))
+rbps <- predict(rb, newdata=data_norm[-samp,])
+#viewing confusion matrix
+confusionMatrix(rbps, factor(data_norm$PAM50.mRNA[-samp]), mode = "everything")
+```
+
+The model achieved 66.6% accuracy after hyper parameter tuning 
+
+The SVM model achieved a accuracy of 80% and the accuracy remained same after hyper-parameter tuning
+The neural networks model achieved accuracy of 80% and the accuracy remained the same after hyper-parameter tuning
+The naive bayes model achieved a accuracy of 76% and the accuracy decreased to  71.4% after hyper-parameter tuning
+The Random Forest model achieved a accuracy of 61% and the accuracy increased to 66.6%  after hyper-parameter tuning
+
+### Comparison of models after tuning
+- It is observed by comparing Accuracy that SVM and NNmodel performs the best amongst the others both before tuning and after tuning. 
+  
+## Compairing Model Accuracies:
+SVM  on original data set values : Accuracy : 0.809, Kappa : 0.7399
+Neural Networks on original data set values : Accuracy :  0.809, Kappa : 0.7358
+Naive bayes on original data set values : Accuracy : 0.7619, Kappa : 0.6729
+Random Forest on original data set values : Accuracy : 0.619, Kappa : 0.4734
+
+SVM  with k-fold cross validation : Accuracy : 0.7723365, Kappa : 0.6914544
+Neural Networks with k-fold cross validation : Accuracy : 0.7786581, Kappa : 0.6980310
+Naive bayes with k-fold cross validation :Accuracy : 0.7535198, Kappa : 0.6617535 
+Random Forest with k-fold cross validation :Accuracy : 0.7795238, Kappa :  0.6920946
+
+SVM  on original data set values after hyper parameter tuning : Accuracy : 0.8095, Kappa : 0.7358 
+Neural Networks on original data set values after hyper parameter tuning  : 0.8095 , Kappa : 0.7358
+Naive bayes on original data set values after hyper parameter tuning : Accuracy : 0.7143, Kappa : 0.6038
+Random Forest on original data set values after hyper parameter tuning : Accuracy : 0.6667, Kappa : 0.5377
+
+-From the above, we can say that both SVM  and Neural Network model has done a good job predicting the cancer subtype
+
+
+## Deployment
+(i) bagging : use of bagging with homogeneous learners
+(ii) Stacked ensemble using - SVM, Neural Networks, Naive Bayes - Majority voting 
+(iii) boosting : Extreme Gradient Boosting 
+
+# Bagging
+use of bagging with homogeneous learners
+```{r}
+set.seed(1000)
+#fit the bagged model
+bag <- bagging(formula = PAM50.mRNA ~ .,data = train,nbagg = 150,   coob = TRUE,control = rpart.control(minsplit = 2, cp = 0))
+#display fitted bagged model
+bag
+bag_pred <- predict(bag, test)
+confusionMatrix(test$`PAM50.mRNA`,bag_pred)
+```
+
+
+Accuracy achieved using bagging is 0.619
+
+
+# Stacking 
+The breast cancer sub-type classifier will be deployed as a model ensemble. A model ensemble is a prediction model that is an aggregate of a set of models. Specifically, a model ensemble aggregates predictions across all the individual models in the ensemble using a voting mechanism. In general, we expect that a collection of independent models would perform better than any individual model.
+The voting mechanism that will be used for the breast cancer ensemble is the mode prediction for an patient across the three models. 
+
+Define a function to calculate the mode across values.
+
+```{r mode_fun}
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+```
+
+Next, define a function to loop through the observations in the test data and generate the modal prediction for each observation across the three classifiers.
+
+```{r vote_fun}
+vote <- function (p1, p2, p3) {
+        
+    m  <- length(p1) # number of predictions in the test data
+    ds <- numeric(m) # creates numeric vector to hold final prediction 
+    
+    # loops through predictions in the test data
+    for (i in 1:m) {
+        # calculate mode prediction for an obs across classifiers
+        p     <- c(p1[i],p2[i],p3[i]) 
+        # store modal prediction in return vector
+        ds[i] <- Mode(p)
+    }
+    
+    # return vector
+    return(ds)
+}
+```
+
+
+Use functions to generate the model ensemble.
+```{r ens_pred}
+ens_pred      <- vote(p1 = svm_pred, p2 = nnpred_model2, p3 = nbpred_model3)
+ens_pred
+```
+
+
+```{r}
+# Factor
+ens_pred[which(ens_pred == 1)] = "Basal.like"
+ens_pred[which(ens_pred == 2)] =  "HER2.enriched"
+ens_pred[which(ens_pred == 3)] = "Luminal.A"
+ens_pred[which(ens_pred == 4)] = "Luminal.B"
+```
+
+
+```{r}
+label <- factor(test$PAM50.mRNA)
+label
+```
+
+
+```{r}
+
+confusionMatrix(factor(ens_pred),  label , mode = "everything")
+```
+
+
+```{r warning=FALSE, message=FALSE}
+mv_auc <- multiclass.roc(label, as.ordered(ens_pred))
+auc(mv_auc)
+```
+
+Macro-averaged Metrics :
+The per-class metrics can be averaged over all the classes resulting in macro-averaged precision, recall and F-1.
+```{r}
+# macro-averaged precision
+precision_stack<- c(0.8333,1.00000,0.8571,0.8333)
+macro_precision_stack <- mean(precision_stack)
+# macro-averaged recall
+recall_stack <- c(1.0000,0.66667,1.0000,0.7143)
+macro_recall_stack<- mean(recall_stack)
+# macro-averaged F-1
+F1_stack<- c(0.9091,0.80000,0.9231,0.7692)
+macroF1_stack <- mean(F1_stack)
+macro_average_stack <-data.frame(macro_precision_stack, macro_recall_stack, macroF1_stack)
+macro_average_stack
+```
+
+
+
+```{r}
+Name_metrics <- c("Accuracy", "Precision", "Recall", "F-1", "AUC", "Kappa")
+values_stack <- c(0.8571, 0.880925, 0.8452425, 0.85035, 0.8452, 0.8037)
+metrics_stack <- data.frame(Name_metrics, values_stack)
+print (metrics_stack)
+```
+
+
+
+# comparison of ensemble to individual models
+
+Of the four models (SVM, NN, NB, RF)- The SVM and NN works better and both the models have similar Accuracy, Precision, Recall, F-1, AUC and Kappa Values
+
+Now, comparing Accuracy, Precision, Recall, F-1, AUC and Kappa values with that of stacked ensemble model (SVM, NN, NB)
+
+I have saved the Accuracy, Precision, Recall, F-1, AUC and Kappa values under metric_model
+```{r}
+metrics_svm
+metrics_nn
+metrics_stack
+```
+
+
+
+By comparing above values, we can say that stacked ensemble model worked better than other individual models with the highest accuracy of 
+85.7% and Precision-0.8809250, Recall-0.8452425, F-1-0.8503500, AUC - 0.8452000, Kappa - 0.8037000	
+Therefore, These values are higher than individual models. 
+
+Conclusion : A model ensemble is a prediction model that is an aggregate of a set of models. Specifically, a model ensemble aggregates predictions across all the individual models ( SVM, NN, NB) in the ensemble using a voting mechanism.And this model has high accuracy of predicting the subtype of cancer than individual models.
+
+# Boosting
+## Extreme gradient boosting
+
+The term “gradient boosting” comes from the idea of “boosting” or improving a single weak model by combining it with a number of other weak models in order to generate a collectively strong model. Gradient boosting is an extension of boosting where the process of additively generating weak models is formalized as a gradient descent algorithm over an objective function. Gradient boosting sets targeted outcomes for the next model in an effort to minimize errors. Targeted outcomes for each case are based on the gradient of the error (hence the name gradient boosting) with respect to the prediction.
+
+XGBoost (eXtreme Gradient Boosting) is a machine learning classifier/predictor, which produces a model in a form of an ensemble of weak prediction models. XGBoost helps to reduce overfitting.
+
+```{r warning=FALSE, message=FALSE}
+## Extreme gradient boosting
+
+xgbGrid <- expand.grid(nrounds = c(1, 10),
+                       max_depth = c(1, 4),
+                       eta = c(.1, .4),
+                       gamma = 0,
+                       colsample_bytree = .7,
+                       min_child_weight = 1,
+                       subsample = c(.8, 1))
+
+
+cctrl1 <- trainControl(method = "cv", number = 3, returnResamp = "all",
+                       classProbs = TRUE)
+
+
+train_en<- createDataPartition(data_norm$`PAM50.mRNA`, p = .70, list = FALSE)
+trainDF<-data_norm[train_en,]
+testDF<-data_norm[-train_en,]
+trainDF$`PAM50.mRNA`<- as.factor(trainDF$`PAM50.mRNA`)
+
+xgb <- train(`PAM50.mRNA` ~., data=trainDF, 
+                               method = "xgbTree", 
+                               trControl = cctrl1,
+                               preProc = c("center", "scale"),
+                               tuneGrid = xgbGrid)
+  
+bpred_xgb <- predict(xgb, newdata=testDF)
+
+confusionMatrix(testDF$`PAM50.mRNA`,bpred_xgb)
+
+```
+
+
+
+I have also built extreme gradient boosting model. This model has an accuracy of 61.9%
+
+Therefore, Stacked ensemble stacked ensemble (SVM, NN, NB) model works better than extereme gradient boosting model
+
+
+# Conclusion
+
+It's really intriguing to me that ML techniques may be used to identify a group of predictor proteins that outperform proteins known to be linked to the genetic test that determines the classification in terms of identifying cancer subtypes.
+
+
+The lasso-selected variables consistently outperformed the PAM50 ones, but no other methods produced classification results that were more accurate than the SVM NN and stacked ensemble (SVM, NN, NB). 
+
+
+
+
+
+
